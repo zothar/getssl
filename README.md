@@ -2,11 +2,11 @@
 Obtain SSL certificates from the letsencrypt.org ACME server.  Suitable for automating the process on remote servers.
 
 ## Features
-* **Bash** - It runs on virtually all linux machines, including MAC OSX (for MAC OSX see the notes at the bottom of the page).
+* **Bash** - It runs on virtually all unix machines, including BSD, most Linux distributions, MAC OSX.
 * **Get certificates for remote servers** - The tokens used to provide validation of domain ownership, and the certificates themselves can be automatically copied to remote servers (via ssh, sftp or ftp for tokens). The script doesn't need to run on the server itself. This can be useful if you don't have access to run such scripts on the server itself, as it's a shared server for example.
 * **Runs as a daily cron** - so certificates will be automatically renewed when required.
 * **Automatic certificate renewals**
-* **Checks certificates are correctly loaded**. After installation of a new certificate it will test the port specified ( see [Server-Types](#server-types) for options ) that the certificate is actually being used correctly. 
+* **Checks certificates are correctly loaded**. After installation of a new certificate it will test the port specified ( see [Server-Types](#server-types) for options ) that the certificate is actually being used correctly.
 * **Automatically updates** - The script can automatically update itself with bug fixes etc if required.
 * **Extensively configurable** - With a simple configuration file for each certificate it is possible to configure it exactly for your needs, whether a simple single domain or multiple domains across multiple servers on the same certificate.
 * **Supports http and dns challenges** - Full ACME implementation
@@ -28,22 +28,25 @@ git clone https://github.com/srvrco/getssl.git
 
 ## Overview
 
-GetSSL was written in standard bash ( so can be run on a server,  a desktop computer, or even a virtualbox) and add the checks, and certificates to a remote server ( providing you have a ssh with key, sftp or ftp access to the remote server).
+GetSSL was written in standard bash ( so it can be run on a server,  a desktop computer, or even a virtualbox) and add the checks, and certificates to a remote server ( providing you have a ssh with key, sftp or ftp access to the remote server).
 
 ```
-getssl ver. 1.00
+getssl ver. 1.64
 Obtain SSL certificates from the letsencrypt.org ACME server
 
-Usage: getssl [-h|--help] [-d|--debug] [-c|--create] [-f|--force] [-a|--all] [-q|--quiet] [-u|--upgrade] [-w working_dir] domain
+Usage: getssl [-h|--help] [-d|--debug] [-c|--create] [-f|--force] [-a|--all] [-q|--quiet] [-Q|--mute] [-u|--upgrade] [-U|--nocheck] [-r|--revoke cert key] [-w working_dir] domain
 
 Options:
-  -h, --help      Display this help message and exit
+  -a, --all       Check all certificates
   -d, --debug     Outputs debug information
   -c, --create    Create default config files
   -f, --force     Force renewal of cert (overrides expiry checks)
-  -a, --all       Check all certificates
-  -q, --quiet     Quiet mode (only outputs on error, or succcess of new cert)
-  -u, --upgrade   Upgrade getssl if more recent version available
+  -h, --help      Display this help message and exit
+  -q, --quiet     Quiet mode (only outputs on error, success of new cert, or getssl was upgraded)
+  -Q, --mute      Like -q, but mutes notification about successful upgrade
+  -r, --revoke cert key  Revoke a certificate ( the cert and key are required)
+  -u, --upgrade   Upgrade getssl if a more recent version is available
+  -U, --nocheck   Do not check if a more recent version is available
   -w working_dir  Working directory
 ```
 
@@ -219,20 +222,21 @@ these are available in getssl to check if the certificate is installed correctly
 | port number      |      |              |
 
 
-## MAC OSX
-The date, grep and sed functions on a MAC are different from gnu-bash, and don't have the same functionality - you can install the "standard" linux versions of these though, and they are gdate, ggrep and gsed.
+##Revoke a certificate
 
+In general revoking a certificate is not required.
 
-```
-brew install grep
-brew install coreutils
-brew install gnu-sed
-```
-should install the relevant items.
+usage: getssl -r path/to/cert path/to/key
+
+You need to specify both the certificate you want to revoke, and the account or private domain key which was used to sign / obtain the original key.
+
+##Elliptic curve keys
+You can use Elliptic curve keys for both the account key and the domain key (different of course, don't use the same key for both). prime256v1 (NIST P-256) and secp384r1 (NIST P-384) are both fully supported.  secp521r1 (NIST P-521) is included in the code, but not currently supported by Let's Encrypt).
+
 
 ## Issues / problems / help
-If you have any issues, please log them at https://github.com/srvrco/getssl/issues 
+If you have any issues, please log them at https://github.com/srvrco/getssl/issues
 
-There are additional help pages on the wiki - https://github.com/srvrco/getssl/wiki
+There are additional help pages on the [wiki](https://github.com/srvrco/getssl/wiki)
 
 If you have any suggestions for improvements then pull requests are welcomed, or raise an issue.
