@@ -304,6 +304,7 @@
 # 2026-07-04 Change default key algorithm to ecdsa (timkimber)(#913)
 # 2026-07-07 Handle missing auth link response without failing (timkimber)(#911)(2.52)
 # 2026-07-31 Obtain the SAN challenge tokens at the start, so that we can submit them in bulk to the DNS, to minimise the DNS propagation time (#904)(mhameed)
+# 2026-07-31 Fix cPanel support for API zone record updates and wildcard domain support (#874)(pgoforth)
 # ----------------------------------------------------------------------------------------
 
 case :$SHELLOPTS: in
