@@ -6,6 +6,7 @@ Obtain SSL certificates from the letsencrypt.org ACME server. Suitable
 for automating the process on remote servers.
 
 ## Table of Contents <!-- omit in toc -->
+
 - [Upgrade broken in v2.43](#upgrade-broken-in-v243)
 - [Features](#features)
 - [Overview](#overview)
@@ -26,11 +27,6 @@ for automating the process on remote servers.
 - [Include Root certificate in full chain](#include-root-certificate-in-full-chain)
 - [Windows Server and IIS Support](#windows-server-and-iis-support)
 - [Issues / problems / help](#issues--problems--help)
-
-## Upgrade broken in v2.43
-
-The automatic upgrade in v2.43 is broken as the url is incorrect.  If you have this version installed you'll need to manually upgrade using:
-```curl --silent --user-agent getssl/manual https://raw.githubusercontent.com/srvrco/getssl/latest/getssl --output getssl```
 
 ## Features
 
@@ -110,23 +106,23 @@ Source RPM packages (SRPMS) and Debbuild SDEB packages for source code installat
 RPM and DEB packages for each release include a binary architecture specific package
 and a source package which can be downloaded and built/rebuilt and which contains the source code.
 
-For example, the release v2.50 contains the following packages in the release section:
+For example, the release v2.52 contains the following packages in the release section:
 
 ### **RPM Based Packages (RedHat, CentOS, SuSe, Oracle Linux, AWS Linux)**
 
-- [getssl-2.50-1.src.rpm](https://github.com/srvrco/getssl/releases/download/2.50/getssl-2.50-1.src.rpm) (source)
-- [getssl-2.50-1.noarch.rpm](https://github.com/srvrco/getssl/releases/download/2.50/getssl-2.50-1.noarch.rpm) (binary)
+- [getssl-2.52-1.src.rpm](https://github.com/srvrco/getssl/releases/download/v2.52/getssl-2.52-1.src.rpm) (source)
+- [getssl-2.52-1.noarch.rpm](https://github.com/srvrco/getssl/releases/download/v2.52/getssl-2.52-1.noarch.rpm) (binary)
 
 ### **Debian Based Packages (Debian, Ubuntu)**
 
-- [getssl_2.50-1_all.deb](https://github.com/srvrco/getssl/releases/download/v2.50/getssl_2.50-1_all.deb) (binary)
+- [getssl_2.52-1_all.deb](https://github.com/srvrco/getssl/releases/download/v2.52/getssl_2.52-1_all.deb) (binary)
 
 ### **Installing Binary Packages**
 
 To install the binary package with the rpm package manager for RedHat, CentOS, SuSe, Oracle Linux, or AWS Linux distributions:
 
 ```sh
-rpm -i getssl-2.50-1.noarch.rpm
+rpm -i getssl-2.52-1.noarch.rpm
 ```
 
 To deinstall the RPM binary package:
@@ -138,7 +134,7 @@ rpm -e getssl
 To install the binary package with the Debian dpkg package manager for Debian and Ubuntu Linux distributions:
 
 ```sh
-dpkg -i getssl_2.50-1_all.deb
+dpkg -i getssl_2.52-1_all.deb
 ```
 
 To deinstall the Debian dpkg binary package:
@@ -152,7 +148,7 @@ dpkg -r getssl
 To install the source package with the rpm package manager for RedHat, CentOS, SuSe, Oracle Linux, or AWS Linux distributions:
 
 ```sh
-rpm -i getssl-2.50-1.src.rpm 
+rpm -i getssl-2.52-1.src.rpm 
 ```
 
 *(Note: rpm installs the source code files in /root/rpmbuild/ as top directory for RedHat, CentOS, Oracle Linux, and AWS Linux platforms.  SuSe platforms install the source code files in /usr/src/packages/)*
@@ -160,7 +156,7 @@ rpm -i getssl-2.50-1.src.rpm
 To install the source package with the Debbuild package tool for Debian or Ubuntu Linux distributions:
 
 ```sh
-debbuild -i getssl-2.50-1.sdeb
+debbuild -i getssl-2.52-1.sdeb
 ```
 
 *(Note: Debbuild installs the source code files in /root/debbuild/ as top directory)*
@@ -168,8 +164,8 @@ debbuild -i getssl-2.50-1.sdeb
 One item of note is that SDEB packages are actually just tar.gz archives renamed with an .sdeb file extension with the files organized into a SPECS and SOURCES directory tree structure.  Subsequently, an SDEB can also be extracted and installed with the **tar -xvf command** or the files listed with the **tar -tvf command**:
 
 ```sh
-[root@localhost getssl]$ tar -tvf /root/debbuild/SDEBS/getssl-2.50-1.sdeb 
--rw-r--r-- root/root   1772110 2022-10-12 20:42 SOURCES/getssl-2.50.tar.gz
+[root@localhost getssl]$ tar -tvf /root/debbuild/SDEBS/getssl-2.52-1.sdeb 
+-rw-r--r-- root/root   1772110 2022-10-12 20:42 SOURCES/getssl-2.52.tar.gz
 -rw-r--r-- root/root       192 2022-08-02 15:02 SOURCES/getssl.crontab
 -rw-r--r-- root/root       126 2022-08-02 15:02 SOURCES/getssl.logrotate
 -rw-r--r-- root/root      1537 2022-08-02 15:02 SPECS/getssl.spec
@@ -732,6 +728,11 @@ FULL_CHAIN_INCLUDE_ROOT="true"
     -   `RELOAD_CMD=("powershell.exe -ExecutionPolicy Bypass -File "\\\\wsl$\\Ubuntu\\home\\user\\getssl\\other_scripts\\iis_install_certeficate.ps1" "domain.eu" "IIS SiteName" "\\\\wsl$\\Ubuntu\\home\\user\\ssl\\" "path_to_ssl_dir" )`
 -   GIT and Rtools4 Bash
     -   `RELOAD_CMD=("powershell.exe /c/Users/Administrator/getssl/other_scripts/iis_install_certeficate.ps1 domain.eu domain path_to_ssl_dir")`
+
+## Upgrade broken in v2.43
+
+The automatic upgrade in v2.43 is broken as the url is incorrect.  If you have this version installed you'll need to manually upgrade using:
+```curl --silent --user-agent getssl/manual https://raw.githubusercontent.com/srvrco/getssl/latest/getssl --output getssl```
 
 ## Issues / problems / help
 

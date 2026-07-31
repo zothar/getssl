@@ -31,7 +31,9 @@ check_github_quota() {
     remaining="$(jq -r '.resources.core.remaining' <<<"$limits")"
     echo "# Remaining: $remaining"
     reset="$(jq -r '.resources.core.reset' <<<"$limits")"
-    if [[ "$remaining" -ge "$need" ]] ; then return 0 ; fi
+    if [[ "$remaining" -ge "$need" ]] ; then
+      return 0
+    fi
     limit="$(jq -r '.resources.core.limit' <<<"$limits")"
     echo "# Limit: $limit"
     if [[ "$limit" -lt "$need" ]] ; then
@@ -72,9 +74,10 @@ check_output_for_errors() {
   contains_whitelisted_phrase=0
   for phrase in "${whitelist_array[@]}"; do
     #echo "# DEBUG: checking output for whitelisted phrase: $phrase"
-    status=1
-    assert_output --regexp "$phrase" 2>/dev/null || status=0
-    contains_whitelisted_phrase=$((status || contains_whitelisted_phrase))
+    if grep -qE "$phrase" <<<"$output"; then
+      contains_whitelisted_phrase=1
+      break
+    fi
   done
 
   if [[ $contains_whitelisted_phrase -eq 0 ]]; then
@@ -87,6 +90,9 @@ check_output_for_errors() {
 }
 
 cleanup_environment() {
+  if [ -f ${INSTALL_DIR}/.getssl/${GETSSL_CMD_HOST}/getssl_test_specific.cfg ]; then
+    rm ${INSTALL_DIR}/.getssl/${GETSSL_CMD_HOST}/getssl_test_specific.cfg
+  fi
   if [ -z "$STAGING" ]; then
     curl --silent -X POST -d '{"host":"'"$GETSSL_HOST"'"}' http://10.30.50.3:8055/clear-a
   fi
@@ -203,4 +209,9 @@ if [ -z "$STAGING" ] && [ ! -f ${INSTALL_DIR}/pebble.minica.pem ]; then
     CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
   fi
   cat $CERT_FILE ${INSTALL_DIR}/pebble.minica.pem > ${INSTALL_DIR}/pebble-ca-bundle.crt
+fi
+
+# Mock sleep for pebble testing
+if [ -z "$STAGING" ]; then
+    export PATH="/getssl/test:$PATH"
 fi

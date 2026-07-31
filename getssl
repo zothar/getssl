@@ -290,12 +290,20 @@
 # 2023-02-04 Create newline to ensure [SAN] section can be parsed (#792)(MRigal)
 # 2023-02-22 Remove cronie from deb package dependencies (2.48)
 # 2024-03-18 Refresh the TXT record if a CNAME is found (JoergBruce #828) (2.49)
-# 2024-03-26 - 2025-07-28 Multiple improvements: DNS script additions for Google Cloud, PowerDNS, Hetzner, INWX, Route 53 bash implementation, profiles support, lowercase replay-nonce headers, RFC 8555 validation and security improvements, test stability improvements, basename dash fix, and processing debug messages (2.50)
-# 2024-03-26 Test for "true" in wildcard property of authorization responses
-# 2024-10-16 Add newlines to /directory response (#765)(#859)
-# 2025-06-18 Support profiles
-# 2025-07-28 Accept lowercase replay-nonce headers (#884)
-# 2026-06-23 Obtain the SAN challenge tokens at the start, so that we can submit them in bulk to the DNS, to minimise the DNS propagation time.
+# 2024-03-26 Test for "true" in wildcard property of authorization responses (jsnider2)(#844)
+# 2024-10-16 Add newlines to /directory response (m-bach)(#862)
+# 2025-07-02 Add support for profiles, fix tests (timkimber)(#881)
+# 2025-07-28 Accept lowercase replay-nonce headers (adaugherity)(#884)
+# 2026-06-03 RFC 8555 validation and security improvements (xen0bit)(#896)(2.50)
+# 2026-06-11 Add ARI support to getssl (kenh)(#894)
+# 2026-06-15 Move loop_limit variable init to fix infinite loop (kenh)(#902)
+# 2026-06-17 Improve profile support (kenh)(#901)(2.51)
+# 2026-06-25 Improve CentOS 6 date support (combolek)(#907)
+# 2026-06-28 Fix issue #908 (allgeyer)(#909)
+# 2026-07-01 Update test OS versions, README, ARI tests (timkimber)(#910)
+# 2026-07-04 Change default key algorithm to ecdsa (timkimber)(#913)
+# 2026-07-07 Handle missing auth link response without failing (timkimber)(#911)(2.52)
+# 2026-07-31 Obtain the SAN challenge tokens at the start, so that we can submit them in bulk to the DNS, to minimise the DNS propagation time (#904)(mhameed)
 # ----------------------------------------------------------------------------------------
 
 case :$SHELLOPTS: in
@@ -304,11 +312,11 @@ esac
 
 PROGNAME=${0##*/}
 PROGDIR="$(cd "$(dirname "$0")" || exit; pwd -P;)"
-VERSION="2.50"
+VERSION="2.52"
 
 # defaults
 ACCOUNT_KEY_LENGTH=4096
-ACCOUNT_KEY_TYPE="rsa"
+ACCOUNT_KEY_TYPE="prime256v1"
 ACME_RESPONSE_PENDING_WAIT=5
 ARI_ENABLE="true"
 CA_CERT_LOCATION=""
@@ -341,7 +349,7 @@ OCSP_MUST_STAPLE="false"
 ORIG_UMASK=$(umask)
 PREFERRED_CHAIN=""              # Set this to use an alternative root certificate
 PREVIOUSLY_VALIDATED="true"
-PRIVATE_KEY_ALG="rsa"
+PRIVATE_KEY_ALG="prime256v1"
 PROFILE=""
 RELOAD_CMD=""
 RENEW_ALLOW="30"
@@ -987,9 +995,11 @@ clean_up() { # Perform pre-exit housekeeping
 validate_token() { # validate token per RFC 8555 §8.3: base64url alphabet, max 255 chars
   local token="$1"
   if [[ ${#token} -gt 255 ]]; then
+    debug "Invalid token (exceeds 255 characters): $token"
     error_exit "Invalid token: exceeds 255 character maximum (RFC 8555)"
   fi
   if [[ ! "$token" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    debug "Invalid token (contains characters outside base64url): $token"
     error_exit "Invalid token: contains characters outside base64url alphabet (RFC 8555)"
   fi
 }
@@ -1368,7 +1378,7 @@ date_rfc3339() { # convert rfc3339 format date into epoch time
     date -D "%Y-%m-%dT%H:%M:%S" -d "$convdate" +%s
   else
     # convert date "<date>T<time>" to epoch, fallback to "<date> <time>" to support old coreutils date on Centos6
-    date -d "$convdate" +%s || date -d "${convdate/T/ }" +%s || error_exit "Failed to parse date ${convdate}"
+    date -d "$convdate" +%s 2>/dev/null || date -d "${convdate/T/ }" +%s || error_exit "Failed to parse date ${convdate}"
   fi
 }
 
@@ -1520,6 +1530,13 @@ for d in "${alldomains[@]}"; do
     response=${AuthLinkResponse[$dn]}
     responseHeaders=${AuthLinkResponseHeader[$dn]}
     response_status=$(json_get "$response" status)
+    # Guard against empty/missing authorization response.
+    # This can happen if the ACME server returns an authorization link whose domain doesn't match exactly in create_order(), leaving AuthLinkResponse[$dn] unset.
+    if [[ "$response_status" == "json was blank" ]]; then
+      info "${DOMAIN}: $d: Authorization response is empty for domain index $dn (auth link may not have matched in create_order)"
+      debug "${DOMAIN}: $d: Authorization response is empty - AuthLinkResponse[$dn]=|${AuthLinkResponse[$dn]}| AuthLinkResponseHeader[$dn]=|${AuthLinkResponseHeader[$dn]}|"
+      return 1
+    fi
   fi
 
   if [[ $response_status == "valid" ]]; then
@@ -2832,9 +2849,6 @@ send_signed_request() { # Sends a request to the ACME server, signed with your p
     CURL="$CURL --trace-ascii $dp "
   fi
 
-  # convert payload to url base 64
-  payload64="$(printf '%s' "${payload}" | urlbase64)"
-
   # get nonce from ACME server
   if [[ $API -eq 1 ]]; then
     nonceurl="$CA/directory"
@@ -2846,6 +2860,9 @@ send_signed_request() { # Sends a request to the ACME server, signed with your p
   loop_limit=5
   nonceproblem="true"
   while [[ "$nonceproblem" == "true" ]]; do
+
+    # convert payload to url base 64
+    payload64="$(printf '%s' "${payload}" | urlbase64)"
 
     # Build header with just our public key and algorithm information
     header='{"alg": "'"$jwkalg"'", "jwk": '"$jwk"'}'
@@ -2938,18 +2955,31 @@ send_signed_request() { # Sends a request to the ACME server, signed with your p
         if [[ $loop_limit -lt 1 ]]; then
           error_exit "$code error from ACME server: $response"
         fi
+        # Check for ARI-specific intermittent error and fix by removing the "replaces" from the payload
+        if [[ $response == *"could not find an order for the given certificate"* ]] && [[ -n "$_REPLACES" ]]; then
+          debug "ARI 'could not find order' error detected"
+          break
+        fi
       fi
     done
     if [[ $response == *"error:badNonce"* ]]; then
       debug "bad nonce"
       nonce=$(echo "$responseHeaders" | grep -i "^replay-nonce:" | awk '{print $2}' | tr -d '\r\n ')
       debug "trying new nonce $nonce"
-      # Need to decrement the loop limit here as well to fix the infinite loop (see PR #902 and test/43-test-acme-400-error-loop) 
+      # Need to decrement the loop limit here as well to fix the infinite loop (see PR #902 and test/43-test-acme-400-error-loop)
       debug "loop_limit = $loop_limit"
       loop_limit=$((loop_limit - 1))
       if [[ $loop_limit -lt 1 ]]; then
         error_exit "$code error from ACME server: $response"
       fi
+    # Either the ACME server coun't find the certificate to replace (intermittent pebble error) or the certificate with this serial has already had a replacement (#908),
+    # in both scenarios, clear the replace serial from the order and try again.
+    elif [[ ( $response == *"could not find an order for the given certificate"* \
+       || $response == *"error:alreadyReplaced"* ) ]] && [[ -n "$_REPLACES" ]]; then
+      debug "ARI renewal error - clearing replaces from payload and retrying (response: $response)"
+      # Remove , "replaces": "..." from the payload
+      payload="${payload//, \"replaces\": \"$_REPLACES\"/}"
+      _REPLACES=""
     else
       nonceproblem="false"
     fi
@@ -3158,7 +3188,7 @@ write_getssl_template() { # write out the main template file
 
 	# Account key and private key types - can be rsa, prime256v1, secp384r1 or secp521r1
 	#ACCOUNT_KEY_TYPE="rsa"
-	PRIVATE_KEY_ALG="rsa"
+	PRIVATE_KEY_ALG="prime256v1"
 	#REUSE_PRIVATE_KEY="true"
 
 	# Preferred Chain - use an different certificate root from the default
@@ -3499,7 +3529,7 @@ if [[ ${_CREATE_CONFIG} -eq 1 ]]; then
     info "creating domain config file in $DOMAIN_DIR/getssl.cfg"
     # if domain has an existing cert, copy from domain and use to create defaults.
     EX_CERT=$(echo \
-      | openssl s_client -servername "${DOMAIN##\*.}" -connect "${DOMAIN##\*.}:443" 2>/dev/null \
+      | timeout 5 openssl s_client -servername "${DOMAIN##\*.}" -connect "${DOMAIN##\*.}:443" 2>/dev/null \
       | openssl x509 2>/dev/null)
     EX_SANS="www.${DOMAIN##\*.}"
     if [[ -n "${EX_CERT}" ]]; then
@@ -3596,7 +3626,7 @@ if [[ "${CHECK_REMOTE}" == "true" ]] && [[ $_FORCE_RENEW -eq 0 ]] && [[ $_SHOW_A
   if [[ "$DUAL_RSA_ECDSA" == "true" ]]; then
     # shellcheck disable=SC2086
     # check if openssl supports RSA-PSS
-    if [[ $(echo | openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} -sigalgs RSA-PSS+SHA256 2>/dev/null) ]]; then
+    if [[ $(echo | timeout 5 openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} -sigalgs RSA-PSS+SHA256 2>/dev/null) ]]; then
         CIPHER="-sigalgs RSA+SHA256:RSA+SHA384:RSA+SHA512:RSA-PSS+SHA256:RSA-PSS+SHA512"
     else
         CIPHER="-sigalgs RSA+SHA256:RSA+SHA384:RSA+SHA512"
@@ -3606,7 +3636,7 @@ if [[ "${CHECK_REMOTE}" == "true" ]] && [[ $_FORCE_RENEW -eq 0 ]] && [[ $_SHOW_A
   fi
   # shellcheck disable=SC2086
   EX_CERT=$(echo \
-    | openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${CIPHER} 2>/dev/null \
+    | timeout 5 openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${CIPHER} 2>/dev/null \
     | openssl x509 2>/dev/null)
   if [[ -n "$EX_CERT" ]]; then # if obtained a cert
     if [[ -s "$CERT_FILE" ]]; then # if local exists
@@ -3931,7 +3961,7 @@ if [[ ${CHECK_REMOTE} == "true" ]]; then
   if [[ "$DUAL_RSA_ECDSA" == "true" ]]; then
     # shellcheck disable=SC2086
     # check if openssl supports RSA-PSS
-    if [[ $(echo | openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} -sigalgs RSA-PSS+SHA256 2>/dev/null) ]]; then
+    if [[ $(echo | timeout 5 openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} -sigalgs RSA-PSS+SHA256 2>/dev/null) ]]; then
         PARAMS=("-sigalgs RSA-PSS+SHA256:RSA-PSS+SHA512:RSA+SHA256:RSA+SHA384:RSA+SHA512" "-sigalgs ECDSA+SHA256:ECDSA+SHA384:ECDSA+SHA512")
     else
         PARAMS=("-sigalgs RSA+SHA256:RSA+SHA384:RSA+SHA512" "-sigalgs ECDSA+SHA256:ECDSA+SHA384:ECDSA+SHA512")
@@ -3948,10 +3978,10 @@ if [[ ${CHECK_REMOTE} == "true" ]]; then
   for ((i=0; i<${#PARAMS[@]};++i)); do
     debug "Checking ${CERTS[i]}"
     # shellcheck disable=SC2086
-    debug openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${PARAMS[i]}
+    debug timeout 5 openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${PARAMS[i]}
     # shellcheck disable=SC2086
     CERT_REMOTE=$(echo \
-        | openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${PARAMS[i]} 2>/dev/null \
+        | timeout 5 openssl s_client -servername "${real_d}" -connect "${real_d}:${REMOTE_PORT}" ${REMOTE_EXTRA} ${PARAMS[i]} 2>/dev/null \
         | openssl x509 -noout -fingerprint 2>/dev/null)
     CERT_LOCAL=$(openssl x509 -noout -fingerprint < "${CERTS[i]}" 2>/dev/null)
     debug CERT_LOCAL="${CERT_LOCAL}"
