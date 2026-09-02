@@ -1,0 +1,29 @@
+name: Run tests against Staging server using acmedns
+on:
+  push:
+    paths-ignore:
+      - '.github/workflows/*'
+    branches:
+      - master
+  pull_request:
+    paths-ignore:
+      - '.github/workflows/*'
+    branches:
+      - master
+  workflow_dispatch:
+
+
+env:
+  DYNU_API_KEY: ${{ secrets.DYNU_API_KEY }}
+  ACMEDNS_API_KEY: ${{ secrets.ACMEDNS_API_KEY }}
+  ACMEDNS_API_USER: ${{ secrets.ACMEDNS_API_USER }}
+  ACMEDNS_SUBDOMAIN: ${{ secrets.ACMEDNS_SUBDOMAIN }}
+jobs:
+  test-ubuntu-acmedns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the docker compose stack
+        run: docker compose up -d --build
+      - name: Run test suite on Ubuntu against Staging using acmedns
+        run: test/run-test.sh ubuntu-acmedns
